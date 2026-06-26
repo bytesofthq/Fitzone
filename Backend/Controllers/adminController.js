@@ -3,7 +3,7 @@ import Admin from '../models/adminModel.js';
 
 // Generate JWT token helper
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'fitzone_super_secret_jwt_key_98765', {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
     expiresIn: '30d'
   });
 };

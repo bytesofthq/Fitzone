@@ -5,7 +5,13 @@ import dotenv from 'dotenv';
 import adminRoutes from './routes/adminRoutes.js';
 import memberRoutes from './routes/memberRoutes.js';
 
-dotenv.config();
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -19,16 +25,22 @@ app.use(express.json());
 
 // Database Connection with Fallback
 const connectDB = async () => {
-  const mongoURI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/fitzone';
+  const mongoURI = process.env.MONGO_URI;
+  if (!mongoURI) {
+    console.error('Error: MONGO_URI is not defined in environment variables.');
+    process.exit(1);
+  }
+
   try {
     await mongoose.connect(mongoURI);
     console.log('Successfully connected to MongoDB Cloud Database.');
   } catch (cloudError) {
     console.error(`MongoDB Cloud connection error: ${cloudError.message}`);
-    console.log('Attempting to connect to local MongoDB fallback...');
+    const localURI = process.env.LOCAL_MONGO_URI || 'mongodb://127.0.0.1:27017/fitzone';
+    console.log(`Attempting to connect to local MongoDB fallback: ${localURI}...`);
     try {
-      await mongoose.connect('mongodb://127.0.0.1:27017/fitzone');
-      console.log('Successfully connected to Local MongoDB (127.0.0.1:27017/fitzone).');
+      await mongoose.connect(localURI);
+      console.log(`Successfully connected to Local MongoDB (${localURI}).`);
     } catch (localError) {
       console.error(`Failed to connect to local fallback MongoDB: ${localError.message}`);
       process.exit(1);

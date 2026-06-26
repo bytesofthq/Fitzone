@@ -10,7 +10,7 @@ export const protect = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
 
       // Decode and verify JWT token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fitzone_super_secret_jwt_key_98765');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
       // Fetch admin details and exclude password field
       req.admin = await Admin.findById(decoded.id).select('-password');
