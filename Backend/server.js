@@ -27,20 +27,59 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Helper to programmatically percent-encode MongoDB connection URI passwords
+const formatMongoURI = (uri) => {
+  if (!uri) return uri;
+  try {
+    const protocolMatch = uri.match(/^(mongodb(?:\+srv)?:\/\/)/);
+    if (!protocolMatch) return uri;
+    
+    const protocol = protocolMatch[1];
+    const remaining = uri.slice(protocol.length);
+    
+    const lastAtIdx = remaining.lastIndexOf('@');
+    if (lastAtIdx === -1) return uri;
+    
+    const credentials = remaining.slice(0, lastAtIdx);
+    const hostAndOptions = remaining.slice(lastAtIdx);
+    
+    const colonIdx = credentials.indexOf(':');
+    if (colonIdx === -1) return uri;
+    
+    const username = credentials.slice(0, colonIdx);
+    const password = credentials.slice(colonIdx + 1);
+    
+    let encodedPassword;
+    try {
+      encodedPassword = encodeURIComponent(decodeURIComponent(password));
+    } catch (e) {
+      encodedPassword = encodeURIComponent(password);
+    }
+    
+    return `${protocol}${username}:${encodedPassword}${hostAndOptions}`;
+  } catch (err) {
+    console.error(`Error formatting MongoDB URI: ${err.message}`);
+    return uri;
+  }
+};
+
 // Database Connection with Fallback
 const connectDB = async () => {
-  const mongoURI = process.env.MONGO_URI;
-  if (!mongoURI) {
+  const rawMongoURI = process.env.MONGO_URI;
+  if (!rawMongoURI) {
     console.error('Error: MONGO_URI is not defined in environment variables.');
     process.exit(1);
   }
+
+  const mongoURI = formatMongoURI(rawMongoURI);
 
   try {
     await mongoose.connect(mongoURI);
     console.log('Successfully connected to MongoDB Cloud Database.');
   } catch (cloudError) {
     console.error(`MongoDB Cloud connection error: ${cloudError.message}`);
-    const localURI = process.env.LOCAL_MONGO_URI || 'mongodb://127.0.0.1:27017/fitzone';
+    const rawLocalURI = process.env.LOCAL_MONGO_URI || 'mongodb://127.0.0.1:27017/fitzone';
+    const localURI = formatMongoURI(rawLocalURI);
     console.log(`Attempting to connect to local MongoDB fallback: ${localURI}...`);
     try {
       await mongoose.connect(localURI);
