@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://fitzone-t8x4.onrender.com/api";
 
 // Helper to make API requests with credentials and JSON headers
 const request = async (endpoint, options = {}) => {

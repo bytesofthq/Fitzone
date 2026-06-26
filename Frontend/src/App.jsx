@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api } from './api';
 import Logo from './components/Logo';
+import logoBytesoft from './assets/logo-bytesoft.png';
 
 export default function App() {
   // Authentication State
@@ -476,6 +477,26 @@ export default function App() {
             <LogOut className="h-4.5 w-4.5" />
             <span>Sign Out</span>
           </button>
+
+          {/* Developer Branding Footer */}
+          <div className="pt-4 border-t border-neutral-800/60 flex flex-col items-center gap-1.5">
+            <span className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold font-sans">Developed by</span>
+            <a 
+              href="https://bytesoft.in" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 group hover:opacity-90 transition-opacity"
+            >
+              <img 
+                src={logoBytesoft} 
+                alt="Bytesoft Logo" 
+                className="h-6 w-auto border border-neutral-800 rounded px-1.5 py-0.5 bg-white/5 group-hover:border-orange-500/30 transition-colors"
+              />
+              <span className="text-xs font-bold text-neutral-400 group-hover:text-white transition-colors">
+                Bytesoft
+              </span>
+            </a>
+          </div>
         </div>
       </aside>
 
