@@ -21,6 +21,7 @@ export default function App() {
 
   // Members & Dashboard State
   const [members, setMembers] = useState([]);
+  const [allMembersForStats, setAllMembersForStats] = useState([]);
   const [expiryAlerts, setExpiryAlerts] = useState([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [loadingAlerts, setLoadingAlerts] = useState(false);
@@ -50,6 +51,7 @@ export default function App() {
     age: '',
     gender: 'Male',
     plan: 'Strength',
+    duration: '1 Month',
     startDate: '',
     expiryDate: '',
     fees: 600
@@ -74,6 +76,7 @@ export default function App() {
   }, [searchQuery]);
 
   // Fetch Member Directory
+  const [loadingAllStats, setLoadingAllStats] = useState(false);
   const fetchMembers = async () => {
     setLoadingMembers(true);
     try {
@@ -83,6 +86,10 @@ export default function App() {
         status: selectedStatus
       });
       setMembers(data);
+      
+      const allData = await api.getMembers({});
+      setAllMembersForStats(allData);
+      
       setErrorMsg('');
     } catch (err) {
       console.error(err);
@@ -154,15 +161,56 @@ export default function App() {
     // Auto-calculate values
     let updatedForm = { ...memberForm, [name]: value };
 
-    if (name === 'plan') {
-      updatedForm.fees = value === 'Strength' ? 600 : 1200;
+    const planFees = {
+      Strength: {
+        '1 Month': 600,
+        '2 Month': 1100,
+        '3 Month': 1600,
+        '6 Month': 2700,
+        '1 Yr': 6000
+      },
+      Cardio: {
+        '1 Month': 1200,
+        '2 Month': 2200,
+        '3 Month': 3300,
+        '6 Month': 6000,
+        '1 Yr': 11000
+      }
+    };
+
+    const durationMonths = {
+      '1 Month': 1,
+      '2 Month': 2,
+      '3 Month': 3,
+      '6 Month': 6,
+      '1 Yr': 12
+    };
+
+    if (name === 'plan' || name === 'duration') {
+      const newPlan = name === 'plan' ? value : updatedForm.plan;
+      const newDuration = name === 'duration' ? value : updatedForm.duration;
+      
+      // Auto fill fees based on plan and duration
+      updatedForm.fees = planFees[newPlan]?.[newDuration] || (newPlan === 'Strength' ? 600 : 1200);
+
+      // Auto recalculate expiryDate if startDate is set
+      if (updatedForm.startDate) {
+        const start = new Date(updatedForm.startDate);
+        if (!isNaN(start.getTime())) {
+          const months = durationMonths[newDuration] || 1;
+          const expiry = new Date(start);
+          expiry.setMonth(expiry.getMonth() + months);
+          updatedForm.expiryDate = expiry.toISOString().split('T')[0];
+        }
+      }
     }
 
     if (name === 'startDate' && value) {
       const start = new Date(value);
       if (!isNaN(start.getTime())) {
+        const months = durationMonths[updatedForm.duration || '1 Month'] || 1;
         const expiry = new Date(start);
-        expiry.setMonth(expiry.getMonth() + 1);
+        expiry.setMonth(expiry.getMonth() + months);
         updatedForm.expiryDate = expiry.toISOString().split('T')[0];
       }
     }
@@ -183,6 +231,7 @@ export default function App() {
       age: '',
       gender: 'Male',
       plan: 'Strength',
+      duration: '1 Month',
       startDate: today,
       expiryDate: expiryStr,
       fees: 600
@@ -212,9 +261,10 @@ export default function App() {
       age: member.age,
       gender: member.gender,
       plan: member.plan,
+      duration: member.duration || '1 Month',
       startDate: member.startDate ? new Date(member.startDate).toISOString().split('T')[0] : '',
       expiryDate: member.expiryDate ? new Date(member.expiryDate).toISOString().split('T')[0] : '',
-      fees: member.fees || (member.plan === 'Strength' ? 600 : 1200)
+      fees: member.fees || 600
     });
     setIsEditModalOpen(true);
   };
@@ -243,13 +293,48 @@ export default function App() {
   const handleExtendMember = async () => {
     if (!memberToExtend) return;
     try {
-      // Calculate new expiry date as exactly 1 month from current expiryDate
       const currentExpiry = new Date(memberToExtend.expiryDate);
-      currentExpiry.setMonth(currentExpiry.getMonth() + 1);
-      const newExpiryStr = currentExpiry.toISOString().split('T')[0];
+      
+      const durationMonths = {
+        '1 Month': 1,
+        '2 Month': 2,
+        '3 Month': 3,
+        '6 Month': 6,
+        '1 Yr': 12
+      };
+      
+      const planFees = {
+        Strength: {
+          '1 Month': 600,
+          '2 Month': 1100,
+          '3 Month': 1600,
+          '6 Month': 2700,
+          '1 Yr': 6000
+        },
+        Cardio: {
+          '1 Month': 1200,
+          '2 Month': 2200,
+          '3 Month': 3300,
+          '6 Month': 6000,
+          '1 Yr': 11000
+        }
+      };
+
+      const months = durationMonths[memberToExtend.duration || '1 Month'] || 1;
+      const targetPlan = memberToExtend.plan || 'Strength';
+      const targetDuration = memberToExtend.duration || '1 Month';
+      const renewalFee = planFees[targetPlan]?.[targetDuration] || (targetPlan === 'Strength' ? 600 : 1200);
+
+      const newExpiry = new Date(currentExpiry);
+      newExpiry.setMonth(newExpiry.getMonth() + months);
+
+      const newStartStr = currentExpiry.toISOString().split('T')[0];
+      const newExpiryStr = newExpiry.toISOString().split('T')[0];
 
       await api.updateMember(memberToExtend._id, {
-        expiryDate: newExpiryStr
+        startDate: newStartStr,
+        expiryDate: newExpiryStr,
+        fees: renewalFee
       });
 
       setIsExtendModalOpen(false);
@@ -292,12 +377,25 @@ export default function App() {
   };
 
   // Dashboard Stats Calculations
-  const totalCount = members.length;
-  const activeCount = members.filter(m => m.status === 'Active').length;
-  const expiredCount = members.filter(m => m.status === 'Expired').length;
-  const monthlyRevenue = members
+  const statsSource = allMembersForStats.length > 0 || searchQuery || selectedPlan || selectedStatus ? allMembersForStats : members;
+  const totalCount = statsSource.length;
+  const activeCount = statsSource.filter(m => m.status === 'Active').length;
+  const expiredCount = statsSource.filter(m => m.status === 'Expired').length;
+  const activeStrengthCount = statsSource.filter(m => m.plan === 'Strength' && m.status === 'Active').length;
+  const activeCardioCount = statsSource.filter(m => m.plan === 'Cardio' && m.status === 'Active').length;
+  const monthlyRevenue = statsSource
     .filter(m => m.status === 'Active')
     .reduce((sum, m) => sum + (m.fees || 0), 0);
+
+  const handleStatCardClick = (plan, status) => {
+    if (selectedPlan === plan && selectedStatus === status) {
+      setSelectedPlan('');
+      setSelectedStatus('');
+    } else {
+      setSelectedPlan(plan);
+      setSelectedStatus(status);
+    }
+  };
 
   // Helper date formatter
   const formatDate = (dateString) => {
@@ -518,7 +616,8 @@ export default function App() {
         </header>
 
         {/* Quick Stats Grid */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* Quick Stats Grid */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
           {/* Stat 1 */}
           <div className="bg-neutral-900/60 border border-neutral-800/80 backdrop-blur-md rounded-2xl p-6 shadow-md hover:border-neutral-700 transition-colors">
             <div className="flex items-center justify-between mb-4">
@@ -555,7 +654,45 @@ export default function App() {
             <p className="text-xs text-neutral-400 mt-2">Validity duration exceeded</p>
           </div>
 
-          {/* Stat 4 */}
+          {/* Stat 4 - Active Strength Members */}
+          <div 
+            onClick={() => handleStatCardClick('Strength', 'Active')}
+            className={`bg-neutral-900/60 border backdrop-blur-md rounded-2xl p-6 shadow-md cursor-pointer hover:border-orange-500 transition-all ${
+              selectedPlan === 'Strength' && selectedStatus === 'Active' 
+                ? 'border-orange-500 ring-1 ring-orange-500 bg-orange-500/5' 
+                : 'border-neutral-800/80 hover:bg-neutral-800/30'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-neutral-400 font-medium text-[10px] uppercase tracking-wider">Active Strength</span>
+              <div className="p-2.5 bg-orange-500/10 rounded-lg text-orange-500">
+                <Activity className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="text-3xl font-black text-orange-500">{activeStrengthCount}</div>
+            <p className="text-xs text-neutral-400 mt-2">Active strength members</p>
+          </div>
+
+          {/* Stat 5 - Active Cardio Members */}
+          <div 
+            onClick={() => handleStatCardClick('Cardio', 'Active')}
+            className={`bg-neutral-900/60 border backdrop-blur-md rounded-2xl p-6 shadow-md cursor-pointer hover:border-orange-500 transition-all ${
+              selectedPlan === 'Cardio' && selectedStatus === 'Active' 
+                ? 'border-orange-500 ring-1 ring-orange-500 bg-orange-500/5' 
+                : 'border-neutral-800/80 hover:bg-neutral-800/30'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-neutral-400 font-medium text-[10px] uppercase tracking-wider">Active Cardio</span>
+              <div className="p-2.5 bg-orange-500/10 rounded-lg text-orange-500">
+                <Activity className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="text-3xl font-black text-orange-500">{activeCardioCount}</div>
+            <p className="text-xs text-neutral-400 mt-2">Active cardio members</p>
+          </div>
+
+          {/* Stat 6 */}
           <div className="bg-neutral-900/60 border border-neutral-800/80 backdrop-blur-md rounded-2xl p-6 shadow-md hover:border-neutral-700 transition-colors">
             <div className="flex items-center justify-between mb-4">
               <span className="text-neutral-400 font-medium text-sm uppercase tracking-wider">Monthly Revenue</span>
@@ -902,8 +1039,24 @@ export default function App() {
                     onChange={handleFormChange}
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500 transition-colors text-sm font-semibold text-orange-500"
                   >
-                    <option value="Strength">Strength Plan (₹600)</option>
-                    <option value="Cardio">Cardio Plan (₹1200)</option>
+                    <option value="Strength">Strength Plan</option>
+                    <option value="Cardio">Cardio Plan</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Membership Plan (Months)</label>
+                  <select
+                    name="duration"
+                    value={memberForm.duration || '1 Month'}
+                    onChange={handleFormChange}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500 transition-colors text-sm font-semibold text-orange-500"
+                  >
+                    <option value="1 Month">1 Month</option>
+                    <option value="2 Month">2 Month</option>
+                    <option value="3 Month">3 Month</option>
+                    <option value="6 Month">6 Month</option>
+                    <option value="1 Yr">1 Yr</option>
                   </select>
                 </div>
 
@@ -1040,8 +1193,24 @@ export default function App() {
                     onChange={handleFormChange}
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500 transition-colors text-sm font-semibold text-orange-500"
                   >
-                    <option value="Strength">Strength Plan (₹600)</option>
-                    <option value="Cardio">Cardio Plan (₹1200)</option>
+                    <option value="Strength">Strength Plan</option>
+                    <option value="Cardio">Cardio Plan</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Membership Plan (Months)</label>
+                  <select
+                    name="duration"
+                    value={memberForm.duration || '1 Month'}
+                    onChange={handleFormChange}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500 transition-colors text-sm font-semibold text-orange-500"
+                  >
+                    <option value="1 Month">1 Month</option>
+                    <option value="2 Month">2 Month</option>
+                    <option value="3 Month">3 Month</option>
+                    <option value="6 Month">6 Month</option>
+                    <option value="1 Yr">1 Yr</option>
                   </select>
                 </div>
 
@@ -1129,18 +1298,36 @@ export default function App() {
                 <span className="text-neutral-300 font-mono">{formatDate(memberToExtend.expiryDate)}</span>
               </div>
               <div className="flex justify-between pt-2 border-t border-neutral-800/80 text-emerald-400 font-semibold">
-                <span>New Expiry (+1 Month):</span>
+                <span>New Expiry (+{memberToExtend.duration || '1 Month'}):</span>
                 <span className="font-mono">
                   {(() => {
                     const date = new Date(memberToExtend.expiryDate);
-                    date.setMonth(date.getMonth() + 1);
+                    const durationMonths = {
+                      '1 Month': 1,
+                      '2 Month': 2,
+                      '3 Month': 3,
+                      '6 Month': 6,
+                      '1 Yr': 12
+                    };
+                    const months = durationMonths[memberToExtend.duration || '1 Month'] || 1;
+                    date.setMonth(date.getMonth() + months);
                     return formatDate(date);
                   })()}
                 </span>
               </div>
               <div className="flex justify-between pt-1 text-white font-bold">
                 <span>Cash Amount Due:</span>
-                <span>₹{memberToExtend.fees || 0}</span>
+                <span>
+                  ₹{(() => {
+                    const planFees = {
+                      Strength: { '1 Month': 600, '2 Month': 1100, '3 Month': 1600, '6 Month': 2700, '1 Yr': 6000 },
+                      Cardio: { '1 Month': 1200, '2 Month': 2200, '3 Month': 3300, '6 Month': 6000, '1 Yr': 11000 }
+                    };
+                    const targetPlan = memberToExtend.plan || 'Strength';
+                    const targetDuration = memberToExtend.duration || '1 Month';
+                    return planFees[targetPlan]?.[targetDuration] || (targetPlan === 'Strength' ? 600 : 1200);
+                  })()}
+                </span>
               </div>
             </div>
 

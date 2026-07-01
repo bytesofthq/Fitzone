@@ -76,7 +76,7 @@ export const getMemberById = async (req, res) => {
 // @route   POST /api/members
 // @access  Private
 export const createMember = async (req, res) => {
-  const { name, phone, age, gender, plan, startDate, expiryDate } = req.body;
+  const { name, phone, age, gender, plan, duration, startDate, expiryDate, fees } = req.body;
 
   try {
     if (!name || !phone || !age || !gender || !plan) {
@@ -90,8 +90,10 @@ export const createMember = async (req, res) => {
       age: Number(age),
       gender,
       plan,
+      duration,
       startDate: startDate ? new Date(startDate) : undefined,
-      expiryDate: expiryDate ? new Date(expiryDate) : undefined
+      expiryDate: expiryDate ? new Date(expiryDate) : undefined,
+      fees: fees !== undefined ? Number(fees) : undefined
     });
 
     const savedMember = await member.save();
@@ -114,7 +116,7 @@ export const createMember = async (req, res) => {
 // @route   PUT /api/members/:id
 // @access  Private
 export const updateMember = async (req, res) => {
-  const { name, phone, age, gender, plan, startDate, expiryDate, fees } = req.body;
+  const { name, phone, age, gender, plan, duration, startDate, expiryDate, fees } = req.body;
 
   try {
     const member = await Member.findById(req.params.id);
@@ -128,14 +130,32 @@ export const updateMember = async (req, res) => {
     member.age = age !== undefined ? Number(age) : member.age;
     member.gender = gender !== undefined ? gender : member.gender;
     member.plan = plan !== undefined ? plan : member.plan;
+    member.duration = duration !== undefined ? duration : member.duration;
     member.startDate = startDate !== undefined ? new Date(startDate) : member.startDate;
     member.expiryDate = expiryDate !== undefined ? new Date(expiryDate) : member.expiryDate;
     
     if (fees !== undefined) {
       member.fees = Number(fees);
-    } else if (plan && plan !== member.plan) {
-      // Auto recalculate fees if plan changes and new fees aren't supplied
-      member.fees = plan === 'Strength' ? 600 : 1200;
+    } else if ((plan && plan !== member.plan) || (duration && duration !== member.duration)) {
+      const targetPlan = plan || member.plan;
+      const targetDuration = duration || member.duration || '1 Month';
+      const planFees = {
+        Strength: {
+          '1 Month': 600,
+          '2 Month': 1100,
+          '3 Month': 1600,
+          '6 Month': 2700,
+          '1 Yr': 6000
+        },
+        Cardio: {
+          '1 Month': 1200,
+          '2 Month': 2200,
+          '3 Month': 3300,
+          '6 Month': 6000,
+          '1 Yr': 11000
+        }
+      };
+      member.fees = planFees[targetPlan]?.[targetDuration] || (targetPlan === 'Strength' ? 600 : 1200);
     }
 
     const updatedMember = await member.save();
